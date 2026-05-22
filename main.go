@@ -20,9 +20,12 @@ func main() {
 	sendPass := os.Getenv("PASS")
 	sendTo := os.Getenv("SEND_TO")
 
-	m := sender.NewMailSender(sendFrom, sendPass)
+	m := sender.NewMailSender(sendFrom, sendPass, "smtp.gmail.com")
 
-	if err := m.Send(sendTo, "Test mail", "Message"); err != nil {
+	msgID, err := m.Send(sendTo, "Test mail", "Message");
+	if err != nil {
 		log.Fatalf("error send message: %s", err)
 	}
+
+	fmt.Println("Sent message ID:", msgID)
 }

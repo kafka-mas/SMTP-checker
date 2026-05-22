@@ -7,40 +7,47 @@ import (
 )
 
 type mailSender struct {
-	SendFrom string
-	Password string
+	SendFrom   string
+	Password   string
+	smtpServer string
 }
 
 type Mail interface {
-	Send(sendTo, subject, msg string) error
+	Send(sendTo, subject, msg string) (*[]string, error)
 }
 
-func NewMailSender(from, password string) Mail {
+func NewMailSender(from, password, smtpServer string) Mail {
 	return &mailSender{
-		SendFrom: from,
-		Password: password,
+		SendFrom:   from,
+		Password:   password,
+		smtpServer: smtpServer,
 	}
 }
 
-func (m mailSender) Send(sendTo, subject, msg string) error {
+func (m mailSender) Send(sendTo, subject, msg string) (*[]string, error) {
 	message := mail.NewMsg()
 	if err := message.From(m.SendFrom); err != nil {
-		log.Fatalf("failed to set From address: %s", err)
-		return err
+		log.Println("failed to set From address:", m.SendFrom)
+		return nil, err
 	}
 	if err := message.To(sendTo); err != nil {
-		log.Fatalf("failed to set To address: %s", err)
-		return err
+		log.Println("failed to set To address:", sendTo)
+		return nil, err
 	}
 	message.Subject(subject)
 	message.SetBodyString(mail.TypeTextPlain, msg)
-	client, err := mail.NewClient("smtp.gmail.com", mail.WithSMTPAuth(mail.SMTPAuthAutoDiscover),
+	client, err := mail.NewClient(m.smtpServer, mail.WithSMTPAuth(mail.SMTPAuthAutoDiscover),
 		mail.WithUsername(m.SendFrom), mail.WithPassword(m.Password))
 	if err != nil {
-		log.Fatalf("failed to create mail client: %s", err)
+		log.Println("failed to create mail client")
+		return nil, err
 	}
 	if err := client.DialAndSend(message); err != nil {
-		log.Fatalf("failed to send mail: %s", err)
+		log.Println("failed to send mail")
+		return nil, err
 	}
-	return nil
+
+	messageID := message.GetGenHeader(mail.HeaderMessageID)
+
+	return &messageID, nil
 }
