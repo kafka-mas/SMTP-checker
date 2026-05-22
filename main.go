@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"smtp-check/sender"
+	"smtp-check/receiver"
 )
 
 func main() {
@@ -16,16 +17,20 @@ func main() {
 		log.Fatal("Ошибка загрузки файла .env")
 	}
 
-	sendFrom := os.Getenv("SEND_FROM")
-	sendPass := os.Getenv("PASS")
-	sendTo := os.Getenv("SEND_TO")
+	externalMail := os.Getenv("SEND_EXT")
+	externalPass := os.Getenv("PASS_EXT")
+	internalMail := os.Getenv("SEND_IN")
+	internalPass := os.Getenv("PASS_IN")
+	m := sender.NewMailSender(externalMail, externalPass, "smtp.mail.ru")
 
-	m := sender.NewMailSender(sendFrom, sendPass, "smtp.gmail.com")
-
-	msgID, err := m.Send(sendTo, "Test mail", "Message");
+	var msgID []string
+	msgID_p, err := m.Send(internalMail, "Test mail", "Message")
 	if err != nil {
 		log.Fatalf("error send message: %s", err)
 	}
+	msgID = *msgID_p
 
-	fmt.Println("Sent message ID:", msgID)
+	fmt.Println("Sent message ID:", msgID[0])
+	
+	err = receiver.WaitForEmail(internalMail, internalPass, "INBOX", msgID[0])
 }
