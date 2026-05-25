@@ -7,8 +7,8 @@ import (
 
 	"github.com/joho/godotenv"
 
+	_ "smtp-check/receiver"
 	"smtp-check/sender"
-	"smtp-check/receiver"
 )
 
 func main() {
@@ -21,16 +21,38 @@ func main() {
 	externalPass := os.Getenv("PASS_EXT")
 	internalMail := os.Getenv("SEND_IN")
 	internalPass := os.Getenv("PASS_IN")
-	m := sender.NewMailSender(externalMail, externalPass, "smtp.mail.ru")
+	// bolidMailer := sender.NewMailSender("checkmail", internalPass, "mail-serv.bolid.ru")
+	bolidMailer := sender.NewMailSender(internalMail, internalPass, "mail-serv.bolid.ru",
+		sender.WithCustomAuth(),
+		sender.WithCustomUsername("checkmail"),
+		sender.WithCustomPort(25),
+		sender.WithNoTLS(),
+		// sender.WithHELO("mail-serv.bolid.ru"),
+	)
 
-	var msgID []string
-	msgID_p, err := m.Send(internalMail, "Test mail", "Message")
+	mailMailer := sender.NewMailSender(externalMail, externalPass, "smtp.mail.ru")
+
+	var msgBolidID []string
+	msgBolidID, err := bolidMailer.Send(externalMail, "Test mail", "Message")
 	if err != nil {
 		log.Fatalf("error send message: %s", err)
 	}
-	msgID = *msgID_p
 
-	fmt.Println("Sent message ID:", msgID[0])
-	
-	err = receiver.WaitForEmail(internalMail, internalPass, "INBOX", msgID[0])
+	fmt.Println("Sent message ID:", msgBolidID[0])
+
+	var msgMailID []string
+	msgMailID, err = mailMailer.Send(internalMail, "Test mail", "Message")
+	if err != nil {
+		log.Fatalf("error send message: %s", err)
+	}
+
+	fmt.Println("Sent message ID:", msgMailID[0])
+
+
+	// var msg []string = []string{"123"}
+
+	// err = receiver.WaitForEmail(externalMail, externalPass, "INBOX", msg[0])
+	// if err != nil {
+	// 	log.Fatalln("Error:", err)
+	// }
 }
