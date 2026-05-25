@@ -8,7 +8,7 @@ import (
 	"github.com/wneessen/go-mail"
 )
 
-type Mail interface {
+type MailSender interface {
 	Send(sendTo, subject, msg string) ([]string, error)
 }
 
@@ -29,7 +29,7 @@ type options struct {
 
 type MailOptions func(*options)
 
-func NewMailSender(login, password, smtpserver string, opts ...MailOptions) Mail {
+func NewMailSender(login, password, smtpserver string, opts ...MailOptions) MailSender {
 	helo, _ := os.Hostname()
 	ms := &mailSender{
 		email:      login,
