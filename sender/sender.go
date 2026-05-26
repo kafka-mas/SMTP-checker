@@ -2,14 +2,15 @@ package sender
 
 import (
 	"crypto/tls"
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/wneessen/go-mail"
 )
 
 type MailSender interface {
-	Send(sendTo, subject, msg string) ([]string, error)
+	//Send message to recipient
+	Send(sendTo, subject, msg string) (string, error)
 }
 
 type mailSender struct {
@@ -29,6 +30,11 @@ type options struct {
 
 type MailOptions func(*options)
 
+/*
+MailSender constructor
+
+returns MailSender object
+*/
 func NewMailSender(login, password, smtpserver string, opts ...MailOptions) MailSender {
 	helo, _ := os.Hostname()
 	ms := &mailSender{
@@ -36,7 +42,6 @@ func NewMailSender(login, password, smtpserver string, opts ...MailOptions) Mail
 		password:   password,
 		smtpServer: smtpserver,
 		opts: options{
-			customAuth: false,
 			customPort: 465,
 			noTLS:      false,
 			helo:       helo,
@@ -50,12 +55,7 @@ func NewMailSender(login, password, smtpserver string, opts ...MailOptions) Mail
 	return ms
 }
 
-func WithCustomAuth() MailOptions {
-	return func(o *options) {
-		o.customAuth = true
-	}
-}
-
+// Setup SMTP port
 func WithCustomPort(port int) MailOptions {
 	return func(o *options) {
 		if port > 0 && port < 65535 {
@@ -64,61 +64,65 @@ func WithCustomPort(port int) MailOptions {
 	}
 }
 
+// Use an insecure connection without verifying the certificate
 func WithNoTLS() MailOptions {
 	return func(o *options) {
 		o.noTLS = true
 	}
 }
 
+// Setup HELO
 func WithHELO(helo string) MailOptions {
 	return func(o *options) {
 		o.helo = helo
 	}
 }
 
+// set username values if it is not specified in the email@domain format
 func WithCustomUsername(username string) MailOptions {
 	return func(o *options) {
 		o.username = username
 	}
 }
 
-func (m *mailSender) Send(sendTo, subject, msg string) ([]string, error) {
+func (m *mailSender) Send(sendTo, subject, msg string) (string, error) {
 	message := mail.NewMsg()
 	if err := message.From(m.email); err != nil {
-		log.Println("failed to set From address:", m.email)
-		return nil, err
+		return "", fmt.Errorf("failed to set From address %v: %w", m.email, err)
 	}
 	if err := message.To(sendTo); err != nil {
-		log.Println("failed to set To address:", sendTo)
-		return nil, err
+		return "", fmt.Errorf("failed to set To address %v: %w", sendTo, err)
 	}
 	message.Subject(subject)
 	message.SetBodyString(mail.TypeTextPlain, msg)
 
-	client, err := mail.NewClient(m.smtpServer)
-	if err != nil {
-		log.Println("failed to create mail client")
-		return nil, err
-	}
-
-	client.SetUsername(m.opts.username)
-	client.SetPassword(m.password)
-
-	if m.opts.customAuth {
-		client.SetSMTPAuth(mail.SMTPAuthLogin)
-		client.SetSSLPort(m.opts.noTLS, true)
-		if m.opts.noTLS {
-			client.SetTLSConfig(&tls.Config{InsecureSkipVerify: true})
+	client, err := func(isNotSecure bool) (*mail.Client, error) {
+		if isNotSecure {
+			return mail.NewClient(m.smtpServer,
+				mail.WithHELO(m.opts.helo),
+				mail.WithUsername(m.opts.username),
+				mail.WithPassword(m.password),
+				mail.WithSMTPAuth(mail.SMTPAuthLogin),
+				mail.WithTLSConfig(&tls.Config{InsecureSkipVerify: true}),
+				mail.WithPort(m.opts.customPort),
+			)
+		} else {
+			return mail.NewClient(m.smtpServer,
+				mail.WithSMTPAuth(mail.SMTPAuthAutoDiscover),
+				mail.WithHELO(m.opts.helo),
+			)
 		}
-	} else {
-		client.SetSMTPAuth(mail.SMTPAuthAutoDiscover)
+	}(m.opts.noTLS)
+	if err != nil {
+		return "", fmt.Errorf("failed to create mail client: %w", err)
 	}
+	defer client.Close()
+
 	if err := client.DialAndSend(message); err != nil {
-		log.Println("failed to send mail")
-		return nil, err
+		return "", fmt.Errorf("failed to send mail: %w", err)
 	}
 
-	messageID := message.GetGenHeader(mail.HeaderMessageID)
+	messageID := message.GetGenHeader(mail.HeaderMessageID)[0]
 
 	return messageID, nil
 }

@@ -9,6 +9,13 @@ import (
 )
 
 type MailReceiver interface {
+	/*
+		targetInbox - target mailbox in the mail client, for example "INBOX"
+
+		messageID - the MessageID field in email headers
+
+		Returns true if message found, false otherwise
+	*/
 	Receive(targetInbox, messageID string) (bool, error)
 }
 
@@ -19,6 +26,7 @@ type mailReceiver struct {
 	opts       options
 }
 
+// Constructor; returns MailReceiver
 func NewMailReceiver(login, password, imapServer string, opts ...IMAPoptions) MailReceiver {
 	mr := &mailReceiver{
 		username:   login,
@@ -28,7 +36,8 @@ func NewMailReceiver(login, password, imapServer string, opts ...IMAPoptions) Ma
 			useTLS:         true,
 			port:           993,
 			customUsername: "",
-			timeout:        time.Duration(30 * time.Second),
+			timeout:        30,
+			pollingTimeout: 5,
 		},
 	}
 
@@ -46,8 +55,10 @@ type options struct {
 	useTLS         bool
 	customUsername string
 	timeout        time.Duration
+	pollingTimeout time.Duration
 }
 
+// Setup IMAP port
 func WithCustomPort(port int) IMAPoptions {
 	return func(mr *options) {
 		if port > 0 && port < 65535 {
@@ -56,23 +67,40 @@ func WithCustomPort(port int) IMAPoptions {
 	}
 }
 
+// Use an insecure connection without verifying the certificate
 func WithNoTLS() IMAPoptions {
-	return func(o *options) { o.useTLS = false }
+	return func(o *options) {
+		o.useTLS = false
+		if o.port == 993 {
+			o.port = 143
+		}
+	}
 }
 
+// set username values if it is not specified in the email@domain format
 func WithCustomUsername(username string) IMAPoptions {
 	return func(o *options) { o.customUsername = username }
 }
 
-//Set polling time in seconds
-func SetTimeout(timeout time.Duration) IMAPoptions {
-	return func(o *options) { o.timeout = timeout * time.Second }
+// Set polling time in seconds
+func WithTimeout(timeout time.Duration) IMAPoptions {
+	return func(o *options) { o.timeout = timeout }
+}
+
+// Set polling timeout in seconds
+func WithPollingTimeout(pollingTimeout time.Duration) IMAPoptions {
+	return func(o *options) {
+		if pollingTimeout > 0 && pollingTimeout <= o.timeout {
+			o.pollingTimeout = pollingTimeout
+		}
+	}
 }
 
 func (m *mailReceiver) Receive(targetInbox, messageID string) (bool, error) {
-	fmt.Println("Подключение к серверу...")
+	if messageID == "" {
+		return false, fmt.Errorf("messageID is empty string")
+	}
 	url := fmt.Sprintf("%v:%d", m.imapServer, m.opts.port)
-	fmt.Println(url)
 	client, err := func(url string) (*imapclient.Client, error) {
 		if m.opts.useTLS {
 			client, err := imapclient.DialTLS(url, nil)
@@ -86,29 +114,20 @@ func (m *mailReceiver) Receive(targetInbox, messageID string) (bool, error) {
 		return false, fmt.Errorf("failed to dial IMAP: %w", err)
 	}
 	defer client.Logout()
-	fmt.Println("Подключено к серверу")
 
-	// Аутентификация
+	// Auth
 	if m.opts.customUsername != "" {
 		m.username = m.opts.customUsername
 	}
 	if err := client.Login(m.username, m.password).Wait(); err != nil {
 		return false, fmt.Errorf("failed to login: %w", err)
 	}
-	fmt.Println("Аутентификация успешна")
 
-	mbox, err := client.Select(targetInbox, nil).Wait()
+	_, err = client.Select(targetInbox, nil).Wait()
 	if err != nil {
 		return false, fmt.Errorf("failed to select inbox: %w", err)
 	}
 
-	fmt.Printf("Всего писем: %d\n", mbox.NumMessages)
-
-	if mbox.NumMessages == 0 {
-		return false, nil
-	}
-
-	// 2. Настройка критериев поиска по Header
 	criteria := &imap.SearchCriteria{
 		Header: []imap.SearchCriteriaHeaderField{
 			{
@@ -120,8 +139,8 @@ func (m *mailReceiver) Receive(targetInbox, messageID string) (bool, error) {
 
 	timeStart := time.Now()
 	for {
-		if time.Since(timeStart) >= m.opts.timeout {
-			return false, fmt.Errorf("error get message with ID %v", messageID)
+		if time.Since(timeStart) >= m.opts.timeout*time.Second {
+			return false, nil
 		}
 
 		searchRes, err := client.UIDSearch(criteria, nil).Wait()
@@ -132,6 +151,6 @@ func (m *mailReceiver) Receive(targetInbox, messageID string) (bool, error) {
 		if len(uids) != 0 {
 			return true, nil
 		}
-		time.Sleep(time.Duration(5) * time.Second)
+		time.Sleep(m.opts.pollingTimeout * time.Second)
 	}
 }

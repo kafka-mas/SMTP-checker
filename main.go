@@ -12,7 +12,6 @@ import (
 )
 
 func main() {
-	fmt.Println("Hello")
 	if err := godotenv.Load(".env"); err != nil {
 		log.Fatal("Ошибка загрузки файла .env")
 	}
@@ -50,7 +49,7 @@ func main() {
 
 	// var msg []string = []string{"123"}
 	// err = receiver.WaitForEmail(externalMail, externalPass, "INBOX", msg[0])
-	imap := receiver.NewMailReceiver(internalMail, internalPass, "imap.gmail.com", receiver.SetTimeout(10))
+	imap := receiver.NewMailReceiver(internalMail, internalPass, "imap.gmail.com", receiver.WithTimeout(10))
 	isMailFind, err := imap.Receive("INBOX", "")
 	if err != nil {
 		log.Fatalln("Error:", err)
