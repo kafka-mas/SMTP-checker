@@ -109,6 +109,8 @@ func (m *mailSender) Send(sendTo, subject, msg string) (string, error) {
 		} else {
 			return mail.NewClient(m.smtpServer,
 				mail.WithSMTPAuth(mail.SMTPAuthAutoDiscover),
+				mail.WithUsername(m.opts.username),
+				mail.WithPassword(m.password),
 				mail.WithHELO(m.opts.helo),
 			)
 		}
