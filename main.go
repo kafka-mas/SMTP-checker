@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -46,17 +48,14 @@ func main() {
 	)
 	externalSender := sender.NewMailSender(externalEmail, externalPass, externalSmtpServer)
 
-	externalMsgID, err := internalSender.Send(externalEmail, "test from internal", "message")
+	inToExtID, err := internalSender.Send(externalEmail, "test from internal", "message")
 	if err != nil {
 		log.Fatalf("error send message: %s", err)
 	}
-	internalMsgID, err := externalSender.Send(internalEmail, "test from external", "message")
+	extToInID, err := externalSender.Send(internalEmail, "test from external", "message")
 	if err != nil {
 		log.Fatalf("error send message: %s", err)
 	}
-
-	fmt.Println("Sent internal message ID:", internalMsgID)
-	fmt.Println("Send external message ID:", externalMsgID)
 
 	internalReceiver := receiver.NewMailReceiver(internalEmail, internalPass, internalImapServer,
 		receiver.WithCustomPort(internalImapPort),
@@ -65,16 +64,47 @@ func main() {
 	)
 	externalReceiver := receiver.NewMailReceiver(externalEmail, externalPass, externalImapServer)
 
-	isInternalMailFind, err := internalReceiver.Receive("INBOX", internalMsgID)
+	isExtToInFind, err := internalReceiver.Receive("INBOX", extToInID)
 	if err != nil {
 		log.Fatalln("Error:", err)
 	}
 
-	isExternalMailFind, err := externalReceiver.Receive("INBOX", externalMsgID)
+	isInToExtFind, err := externalReceiver.Receive("INBOX", inToExtID)
 	if err != nil {
 		log.Fatalln("Error:", err)
 	}
 
-	fmt.Println("Internal mail find:", isInternalMailFind)
-	fmt.Println("External mail find:", isExternalMailFind)
+	type InternalToExternal struct {
+		MessageID       string `json:"messageID"`
+		MessageReceived bool   `json:"messageReceived"`
+	}
+	type ExternalToInternal struct {
+		MessageID       string `json:"messageID"`
+		MessageReceived bool   `json:"messageReceived"`
+	}
+	type Result struct {
+		InternalToExternal InternalToExternal `json:"internalToExternal"`
+		ExternalToInternal ExternalToInternal `json:"externalToInternal"`
+	}
+
+	res := Result{
+		InternalToExternal: InternalToExternal{
+			MessageID:       inToExtID,
+			MessageReceived: isInToExtFind,
+		},
+		ExternalToInternal: ExternalToInternal{
+			MessageID:       extToInID,
+			MessageReceived: isExtToInFind,
+		},
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) 
+	err = enc.Encode(res)
+	if err != nil {
+		log.Fatalf("error encoding struct to json: %v", err)
+	}
+
+	resJSON := bytes.TrimSpace(buf.Bytes()) 
+	fmt.Println(string(resJSON))
 }
