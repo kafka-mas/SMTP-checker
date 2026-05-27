@@ -22,11 +22,14 @@ fi
 touch $ZABBIX_PATH/smtp-checker.conf
 
 cat > $ZABBIX_PATH/smtp-checker.conf << EOF
-UserParameter=smtp-checker[*], $BINARY_PATH \$1
+UserParameter=smtpchecker.master[*], $BINARY_PATH \$1
 EOF
 
 cp $PWD/templates/.env-temp $PWD/build/.env
 $EDITOR $PWD/build/.env
+
+chmod +x $BINARY_PATH
+chown -R zabbix:zabbix $BINARY_PATH
 
 systemctl restart zabbix-agent.service
 
