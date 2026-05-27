@@ -1,5 +1,5 @@
 zabbix_export:
-  version: '7.0'
+  version: '7.4'
   template_groups:
     - uuid: 5c7c92784ac743bfbcb3cfa42f00ef67
       name: EMail
@@ -11,44 +11,81 @@ zabbix_export:
       groups:
         - name: EMail
       items:
-        - uuid: 61f60e9de474460087692112423b478c
-          name: 'Internal to external Message-ID'
-          key: 'smtp-checker[0]'
-          delay: 30m
-          value_type: TEXT
-          preprocessing:
-            - type: JSONPATH
-              parameters:
-                - $.internalToExternal.messageID
-        - uuid: ee37b83ff084468fa96d70eff2147ff5
-          name: 'External to internal Message-ID'
-          key: 'smtp-checker[1]'
-          delay: 30m
-          value_type: TEXT
-          preprocessing:
-            - type: JSONPATH
-              parameters:
-                - $.externalToInternal.messageID
-        - uuid: c2b60ec5e74649789ebd6f94f1ba1b7b
-          name: 'Internal to external delivered'
-          key: 'smtp-checker[2]'
-          delay: 30m
-          trends: '0'
-          preprocessing:
-            - type: JSONPATH
-              parameters:
-                - $.internalToExternal.messageReceived
-            - type: BOOL_TO_DECIMAL
         - uuid: e68e2c2b2ce04738ac9df5e313facde7
           name: 'External to internal delivered'
-          key: 'smtp-checker[3]'
-          delay: 30m
+          type: DEPENDENT
+          key: smtpchecker.external.message.delivered
           trends: '0'
           preprocessing:
             - type: JSONPATH
               parameters:
                 - $.externalToInternal.messageReceived
+              error_handler: CUSTOM_VALUE
+              error_handler_params: fail
             - type: BOOL_TO_DECIMAL
+          master_item:
+            key: 'smtpchecker.master[SMTP-checker/.env]'
+          tags:
+            - tag: vendor
+              value: a-margin
+        - uuid: 61f60e9de474460087692112423b478c
+          name: 'Internal to external Message-ID'
+          type: DEPENDENT
+          key: smtpchecker.external.message.id
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.internalToExternal.messageID
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: 'smtpchecker.master[SMTP-checker/.env]'
+          tags:
+            - tag: vendor
+              value: a-margin
+        - uuid: c2b60ec5e74649789ebd6f94f1ba1b7b
+          name: 'Internal to external delivered'
+          type: DEPENDENT
+          key: smtpchecker.internal.message.delivered
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.internalToExternal.messageReceived
+              error_handler: CUSTOM_VALUE
+              error_handler_params: fail
+            - type: BOOL_TO_DECIMAL
+          master_item:
+            key: 'smtpchecker.master[SMTP-checker/.env]'
+          tags:
+            - tag: vendor
+              value: a-margin
+        - uuid: ee37b83ff084468fa96d70eff2147ff5
+          name: 'External to internal Message-ID'
+          type: DEPENDENT
+          key: smtpchecker.internal.message.id
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.externalToInternal.messageID
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: 'smtpchecker.master[SMTP-checker/.env]'
+          tags:
+            - tag: vendor
+              value: a-margin
+        - uuid: bceedc64621347c88d3459ac348b39f4
+          name: SMTP-checker
+          key: 'smtpchecker.master[SMTP-checker/.env]'
+          delay: 30m
+          value_type: TEXT
+          timeout: 90s
+          tags:
+            - tag: vendor
+              value: a-margin
       tags:
         - tag: class
           value: application
@@ -56,7 +93,7 @@ zabbix_export:
           value: email
   triggers:
     - uuid: 7b5e3b8a911c47caa8bb45d0b90862a9
-      expression: 'last(/Emai Checker/smtp-checker[2])=0 or last(/Emai Checker/smtp-checker[3])=0'
+      expression: 'last(/Emai Checker/smtpchecker.internal.message.delivered)=0 or last(/Emai Checker/smtpchecker.external.message.delivered)=0 or last(/Emai Checker/smtpchecker.internal.message.id)=0 or last(/Emai Checker/smtpchecker.external.message.id)=0'
       name: 'Email server unavailable'
       priority: HIGH
   graphs:
@@ -70,10 +107,10 @@ zabbix_export:
           calc_fnc: ALL
           item:
             host: 'Emai Checker'
-            key: 'smtp-checker[3]'
+            key: smtpchecker.external.message.delivered
         - sortorder: '1'
           color: F63100
           calc_fnc: ALL
           item:
             host: 'Emai Checker'
-            key: 'smtp-checker[2]'
+            key: smtpchecker.internal.message.delivered

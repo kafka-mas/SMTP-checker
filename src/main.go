@@ -15,7 +15,15 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(".env"); err != nil {
+	var envpath string = ".env"
+
+	args := os.Args
+	if len(args) > 1 {
+		envpath = args[1]
+	}
+
+
+	if err := godotenv.Load(envpath); err != nil {
 		log.Fatal("error load .env")
 	}
 
