@@ -1,0 +1,79 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 5c7c92784ac743bfbcb3cfa42f00ef67
+      name: EMail
+  templates:
+    - uuid: 3f70fdacb54f44b4b1364705338858e9
+      template: 'Emai Checker'
+      name: 'Emai Checker'
+      description: 'Отправляет письмо из внутреннего почтового ящика и проверяет доставку письма во внешнем постовом ящике, затем отправляет письмо со внешнего адреса и проверяет доставку во внутреннем.'
+      groups:
+        - name: EMail
+      items:
+        - uuid: 61f60e9de474460087692112423b478c
+          name: 'Internal to external Message-ID'
+          key: 'smtp-checker[0]'
+          delay: 30m
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.internalToExternal.messageID
+        - uuid: ee37b83ff084468fa96d70eff2147ff5
+          name: 'External to internal Message-ID'
+          key: 'smtp-checker[1]'
+          delay: 30m
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.externalToInternal.messageID
+        - uuid: c2b60ec5e74649789ebd6f94f1ba1b7b
+          name: 'Internal to external delivered'
+          key: 'smtp-checker[2]'
+          delay: 30m
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.internalToExternal.messageReceived
+            - type: BOOL_TO_DECIMAL
+        - uuid: e68e2c2b2ce04738ac9df5e313facde7
+          name: 'External to internal delivered'
+          key: 'smtp-checker[3]'
+          delay: 30m
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.externalToInternal.messageReceived
+            - type: BOOL_TO_DECIMAL
+      tags:
+        - tag: class
+          value: application
+        - tag: target
+          value: email
+  triggers:
+    - uuid: 7b5e3b8a911c47caa8bb45d0b90862a9
+      expression: 'last(/Emai Checker/smtp-checker[2])=0 or last(/Emai Checker/smtp-checker[3])=0'
+      name: 'Email server unavailable'
+      priority: HIGH
+  graphs:
+    - uuid: 98f1417587b2452da2f9af53e1149975
+      name: 'Email delivered'
+      yaxismax: '2'
+      ymin_type_1: FIXED
+      ymax_type_1: FIXED
+      graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: 'Emai Checker'
+            key: 'smtp-checker[3]'
+        - sortorder: '1'
+          color: F63100
+          calc_fnc: ALL
+          item:
+            host: 'Emai Checker'
+            key: 'smtp-checker[2]'
