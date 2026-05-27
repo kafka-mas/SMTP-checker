@@ -4,56 +4,77 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 
 	"smtp-check/receiver"
-	_ "smtp-check/sender"
+	"smtp-check/sender"
 )
 
 func main() {
 	if err := godotenv.Load(".env"); err != nil {
-		log.Fatal("Ошибка загрузки файла .env")
+		log.Fatal("error load .env")
 	}
 
-	// externalMail := os.Getenv("SEND_EXT")
-	// externalPass := os.Getenv("PASS_EXT")
-	internalMail := os.Getenv("SEND_IN")
-	internalPass := os.Getenv("PASS_IN")
-	// bbbMailer := sender.NewMailSender("checkmail", internalPass, "mail-serv.bbb.ru")
-	// bbbMailer := sender.NewMailSender(internalMail, internalPass, "mail-serv.bbb.ru",
-	// 	sender.WithCustomAuth(),
-	// 	sender.WithCustomUsername("checkmail"),
-	// 	sender.WithCustomPort(25),
-	// 	sender.WithNoTLS(),
-	// 	// sender.WithHELO("mail-serv.bbb.ru"),
-	// )
-	//
-	// mailMailer := sender.NewMailSender(externalMail, externalPass, "smtp.mail.ru")
-	//
-	// var msgbbbID []string
-	// msgbbbID, err := bbbMailer.Send(externalMail, "Test mail", "Message")
-	// if err != nil {
-	// 	log.Fatalf("error send message: %s", err)
-	// }
-	//
-	// fmt.Println("Sent message ID:", msgbbbID[0])
-	//
-	// var msgMailID []string
-	// msgMailID, err = mailMailer.Send(internalMail, "Test mail", "Message")
-	// if err != nil {
-	// 	log.Fatalf("error send message: %s", err)
-	// }
-	//
-	// fmt.Println("Sent message ID:", msgMailID[0])
+	externalEmail := os.Getenv("EXT_EMAIL")
+	externalPass := os.Getenv("EXT_PASS")
+	externalImapServer := os.Getenv("EXT_IMAP_SERVER")
+	externalSmtpServer := os.Getenv("EXT_SMTP_SERVER")
 
-	// var msg []string = []string{"123"}
-	// err = receiver.WaitForEmail(externalMail, externalPass, "INBOX", msg[0])
-	imap := receiver.NewMailReceiver(internalMail, internalPass, "imap.gmail.com", receiver.WithTimeout(10))
-	isMailFind, err := imap.Receive("INBOX", "")
+	internalEmail := os.Getenv("IN_EMAIL")
+	internalPass := os.Getenv("IN_PASS")
+	internalImapServer := os.Getenv("IN_IMAP_SERVER")
+	internalImapPort_s := os.Getenv("IN_IMAP_PORT")
+	internalSmtpServer := os.Getenv("IN_SMTP_SERVER")
+	internalSmtpPort_s := os.Getenv("IN_SMTP_PORT")
+	internalUser := os.Getenv("IN_USER")
+
+	internalImapPort, err := strconv.Atoi(internalImapPort_s)
+	if err != nil {
+		log.Fatalf("error, param INTERNAL_IMAP_PORT must be integer: %v", err)
+	}
+	internalSmtpPort, err := strconv.Atoi(internalSmtpPort_s)
+	if err != nil {
+		log.Fatalf("error, param INTERNAL_IMAP_PORT must be integer: %v", err)
+	}
+
+	internalSender := sender.NewMailSender(internalEmail, internalPass, internalSmtpServer,
+		sender.WithCustomPort(internalSmtpPort),
+		sender.WithCustomUsername(internalUser),
+		sender.WithNoTLS(),
+	)
+	externalSender := sender.NewMailSender(externalEmail, externalPass, externalSmtpServer)
+
+	externalMsgID, err := internalSender.Send(externalEmail, "test from internal", "message")
+	if err != nil {
+		log.Fatalf("error send message: %s", err)
+	}
+	internalMsgID, err := externalSender.Send(internalEmail, "test from external", "message")
+	if err != nil {
+		log.Fatalf("error send message: %s", err)
+	}
+
+	fmt.Println("Sent internal message ID:", internalMsgID)
+	fmt.Println("Send external message ID:", externalMsgID)
+
+	internalReceiver := receiver.NewMailReceiver(internalEmail, internalPass, internalImapServer,
+		receiver.WithCustomPort(internalImapPort),
+		receiver.WithCustomUsername(internalUser),
+		receiver.WithNoTLS(),
+	)
+	externalReceiver := receiver.NewMailReceiver(externalEmail, externalPass, externalImapServer)
+
+	isInternalMailFind, err := internalReceiver.Receive("INBOX", internalMsgID)
 	if err != nil {
 		log.Fatalln("Error:", err)
 	}
-	
-	fmt.Println(isMailFind)
+
+	isExternalMailFind, err := externalReceiver.Receive("INBOX", externalMsgID)
+	if err != nil {
+		log.Fatalln("Error:", err)
+	}
+
+	fmt.Println("Internal mail find:", isInternalMailFind)
+	fmt.Println("External mail find:", isExternalMailFind)
 }
